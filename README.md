@@ -132,9 +132,16 @@ Now copy the new files in the folder
     $ cp /tmp/cloudvamp/opennebula/vmm/cloudvamp/* /var/lib/one/remotes/vmm/cloudvamp/
   ```
 
-Finally link the other file in the folder (please ignore the messages that state that the files already exist):
+Link the other file in the folder (please ignore the messages that state that the files already exist):
   ```
     $ ln -s ../kvm/* /var/lib/one/remotes/vmm/cloudvamp/
+
+  ```
+
+Finally, create a folder for the etc/vmm/cloudvamp as a link to the kvm one:
+
+  ```
+    $ ln -s /var/lib/one/remotes/etc/vmm/kvm /var/lib/one/remotes/etc/vmm/cloudvamp
   ```
 
 Create a folder for cloudvamp im probes files at ONE's im folder (usually `/var/lib/one/remotes/im`) and create links to the files in kvm folder:
@@ -152,6 +159,7 @@ Now copy the new files in the folder
 Link the files to the kvm probes and set the values for the cloudvamp probes
 
   ```
+    $ ln -s /var/lib/one/remotes/etc/im/kvm-probes.d /var/lib/one/remotes/etc/im/cloudvamp-probes.d
     $ ln -s /var/lib/one/remotes/im/kvm-probes.d/* /var/lib/one/remotes/im/cloudvamp-probes.d/
     $ cd /var/lib/one/remotes/im/cloudvamp-probes.d
     $ rm kvm.rb

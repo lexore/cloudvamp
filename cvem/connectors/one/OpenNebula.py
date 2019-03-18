@@ -150,6 +150,12 @@ class OpenNebula(CMPInfo):
 			res = []
 			for vm in res_vm.VM:
 				try:
+					(success, res_vminfo, _) = server.one.vm.info(ConfigONE.ONE_ID, vm.ID)
+					vm = VM(res_vminfo)
+					except Exception:
+					logger.exception("Error getting the VM info for vm id = %s", vm.ID)
+					continue
+				try:
 					host = HostInfo(int(vm.HISTORY_RECORDS.HISTORY[0].HID), vm.HISTORY_RECORDS.HISTORY[0].HOSTNAME)
 					new_vm = VirtualMachineInfo(int(vm.ID), host, int(vm.TEMPLATE.MEMORY) * 1024, vm)
 					new_vm.user_id = vm.UID
