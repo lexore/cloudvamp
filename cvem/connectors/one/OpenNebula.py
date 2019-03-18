@@ -152,7 +152,7 @@ class OpenNebula(CMPInfo):
 				try:
 					(success, res_vminfo, _) = server.one.vm.info(ConfigONE.ONE_ID, vm.ID)
 					vm = VM(res_vminfo)
-					except Exception:
+				except Exception:
 					logger.exception("Error getting the VM info for vm id = %s", vm.ID)
 					continue
 				try:
