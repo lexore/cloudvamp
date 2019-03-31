@@ -21,6 +21,11 @@ import os
 from config import Config, logger
 from cpyutils.runcommand import runcommand
 
+
+# An ideal amount of memory to compare to
+INFINITY = float("inf")
+
+
 class VMMonitorData:
 	"""
 	Class to store monitoring information for each VM 
@@ -146,10 +151,14 @@ class Monitor:
 			if vm.mem_over_ratio:
 				mem_over_ratio = vm.mem_over_ratio
 
-			if vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN) or vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN):
+			memory_lower_bound = vm.min_total_memory or Config.MEM_MIN or 0
+			memory_upper_bound = vm.max_total_memory or self.vm_data[vm.id].original_mem or vm.allocated_memory or INFINITY
+
+			if vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN) or vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN) or vm.total_memory < (memory_lower_bound - Config.MEM_MARGIN) or vm.total_memory > (memory_upper_bound + Config.MEM_MARGIN):
 				now = time.time()
 		
 				logger.debug(vmid_msg + "VM %s has %.2f%% of free memory, change the memory size" % (vm.id, vm_pct_free_memory))
+				logger.debug(vmid_msg + "VM %s has %s total memory (min bound: %s; max bound %s)" % (vm.id, vm.total_memory, memory_lower_bound, memory_upper_bound))
 				if self.vm_data[vm.id].last_set_mem is not None:
 					logger.debug(vmid_msg + "Last memory change was %s secs ago." % (now - self.vm_data[vm.id].last_set_mem))
 				else:
@@ -183,16 +192,17 @@ class Monitor:
 						new_mem =  int(used_mem / divider)
 
 					# Check for minimum memory
-					if new_mem < Config.MEM_MIN:
-						new_mem = Config.MEM_MIN
+					if new_mem < memory_lower_bound:
+						new_mem = memory_lower_bound
 
 					# add diff to new_mem value and to total_memory to make it real_memory (vm.real_memory has delays between updates)
 					new_mem += self.vm_data[vm.id].mem_diff
 					vm.total_memory += self.vm_data[vm.id].mem_diff
 					
 					# We never set more memory that the initial amount
-					if new_mem > self.vm_data[vm.id].original_mem:
-						new_mem = self.vm_data[vm.id].original_mem
+					# or the amount specified in VAMP_MAX_TOTAL_MEM
+					if new_mem > memory_upper_bound:
+						new_mem = memory_upper_bound
 	
 					if abs(int(vm.total_memory)-new_mem) < Config.MEM_DIFF_TO_CHANGE:
 						logger.debug(vmid_msg + "Not changing the memory. Too small difference.")
@@ -203,7 +213,7 @@ class Monitor:
 							if not self.host_has_memory_free(vm.host,new_mem-vm.total_memory):
 								# The host has not enough free memory. Let's try to migrate a VM.
 								logger.debug(vmid_msg + "The host " + vm.host.name + " has not enough free memory!")
-								if Config.MIGRATION:
+								if Config.MIGRATION and not vm.do_not_migrate:
 									logger.debug(vmid_msg + "Let's try to migrate a VM.")
 									if vm.host.id in self.last_migration and (now - self.last_migration[vm.host.id]) < Config.MIGRATION_COOLDOWN:
 										logger.debug("The host %s is in migration cooldown period, let's wait.." % vm.host.name)
@@ -213,7 +223,7 @@ class Monitor:
 											self.last_migration[vm.host.id] = now
 								else:
 									logger.debug(vmid_msg + "Migration is disabled.")
-									if Config.FORCE_INCREASE_MEMORY:
+									if Config.FORCE_INCREASE_MEMORY or vm.force_increase:
 										logger.debug(vmid_msg + "But Force increase memory is activated. Changing memory.")
 										self.change_memory(vm.id, vm.host, new_mem)
 										self.vm_data[vm.id].last_set_mem = now
