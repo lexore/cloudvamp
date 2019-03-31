@@ -49,8 +49,8 @@ class HISTORY_RECORDS(XMLObject):
 	tuples_lists = { 'HISTORY': HISTORY }
 
 class USER_TEMPLATE(XMLObject):
-		values = [ 'MEM_FREE', 'MEM_TOTAL', 'MEM_TOTAL_REAL', 'MIN_FREE_MEM', 'MEM_OVER', 'TIMESTAMP']
-		numeric = [ 'MEM_FREE', 'MEM_TOTAL', 'MEM_TOTAL_REAL', 'MIN_FREE_MEM', 'MEM_OVER',  'TIMESTAMP']
+		values = [ 'MEM_FREE', 'MEM_TOTAL', 'MEM_TOTAL_REAL', 'MIN_FREE_MEM', 'MEM_OVER', 'TIMESTAMP', 'VAMP_DISABLE', 'VAMP_MIN_TOTAL_MEM', 'VAMP_MAX_TOTAL_MEM', 'VAMP_DO_NOT_MIGRATE', 'VAMP_FORCE_INCREASE'
+		numeric = [ 'MEM_FREE', 'MEM_TOTAL', 'MEM_TOTAL_REAL', 'MIN_FREE_MEM', 'MEM_OVER',  'TIMESTAMP', 'VAMP_DISABLE', 'VAMP_MIN_TOTAL_MEM', 'VAMP_MAX_TOTAL_MEM', 'VAMP_DO_NOT_MIGRATE', 'VAMP_FORCE_INCREASE']
 
 class VM(XMLObject):
 		STATE_INIT=0
@@ -159,6 +159,8 @@ class OpenNebula(CMPInfo):
 					host = HostInfo(int(vm.HISTORY_RECORDS.HISTORY[0].HID), vm.HISTORY_RECORDS.HISTORY[0].HOSTNAME)
 					new_vm = VirtualMachineInfo(int(vm.ID), host, int(vm.TEMPLATE.MEMORY) * 1024, vm)
 					new_vm.user_id = vm.UID
+					if vm.USER_TEMPLATE.VAMP_DISABLE:
+						continue
 					if vm.USER_TEMPLATE.MEM_TOTAL:
 						# to make it work on all ONE versions
 						real_memory = vm.TEMPLATE.REALMEMORY
@@ -173,6 +175,14 @@ class OpenNebula(CMPInfo):
 							new_vm.mem_over_ratio = vm.USER_TEMPLATE.MEM_OVER
 						if vm.USER_TEMPLATE.TIMESTAMP:
 							new_vm.timestamp = vm.USER_TEMPLATE.TIMESTAMP
+						if vm.USER_TEMPLATE.VAMP_MIN_TOTAL_MEM:
+							new_vm.min_total_memory = vm.USER_TEMPLATE.VAMP_MIN_TOTAL_MEM
+						if vm.USER_TEMPLATE.VAMP_MAX_TOTAL_MEM:
+							new_vm.max_total_memory = vm.USER_TEMPLATE.VAMP_MAX_TOTAL_MEM
+						if vm.USER_TEMPLATE.VAMP_DO_NOT_MIGRATE:
+							new_vm.do_not_migrate = True
+						if vm.USER_TEMPLATE.VAMP_FORCE_INCREASE:
+							new_vm.force_increase = True
 
 						# publish MEM properties to the VM user template to show the values to the user
 						OpenNebula._publish_mem_info(new_vm)

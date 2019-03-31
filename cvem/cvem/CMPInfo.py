@@ -90,6 +90,14 @@ class VirtualMachineInfo:
 		"""
 		self.raw = raw
 		""" Data of the VM in the original format of the CMP """
+        self.min_total_memory = None
+        """ If VAMP_MIN_TOTAL_MEM is defined in USER_TEMPLATE, it is the lower bound of this VM's total memory instead of Config.MEM_MIN """
+        self.max_total_memory = None
+        """ If VAMP_MAX_TOTAL_MEM is defined in USER_TEMPLATE, it is the upper bound of this VM's total memory instead of VM's original memory """
+        self.do_not_migrate = False
+        """ If VAMP_DO_NOT_MIGRATE is defined in USER_TEMPLATE, do not attempt to migrate this VM (even if Config.MIGRATION is true)."""
+        self.force_increase = False
+        """ If VAMP_FORCE_INCREASE is defined in USER_TEMPLATE, ignore lack of host free memory when increasing (even if Config.FORCE_INCREASE_MEMORY is false) """
 	
 	def set_memory_values(self, real_memory, total_memory, free_memory):
 		"""
