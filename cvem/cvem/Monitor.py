@@ -154,9 +154,25 @@ class Monitor:
 			memory_lower_bound = vm.min_total_memory or Config.MEM_MIN or 0
 			memory_upper_bound = vm.max_total_memory or self.vm_data[vm.id].original_mem or vm.allocated_memory or INFINITY
 
-			if vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN) or vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN) or vm.total_memory < (memory_lower_bound - Config.MEM_MARGIN) or vm.total_memory > (memory_upper_bound + Config.MEM_MARGIN):
+			margin = int(float(memory_upper_bound) * 0.05)
+
+			_not_enough_total = vm.total_memory < (memory_lower_bound - margin)
+			_too_much_total = vm.total_memory > (memory_upper_bound + margin)
+			_at_maximum_bound = vm.total_memory > (memory_upper_bound - margin)
+			_at_mininum_bound = vm.total_memory < (memory_lower_bound + margin)
+			cases = dict(
+				_not_enough_free  = vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN) and not _at_maximum_bound,
+				_too_much_free    = vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN) and not _at_mininum_bound,
+				_not_enough_total = vm.total_memory < (memory_lower_bound - margin),
+				_too_much_total   = vm.total_memory > (memory_upper_bound + margin),
+			)
+			if any(cases.values()):
+				for _case, _true in cases.items():
+					if _true:
+						logger.debug(vmid_msg + "VM %s has %s" % (vm.id, _case))
+
 				now = time.time()
-		
+
 				logger.debug(vmid_msg + "VM %s has %.2f%% of free memory, change the memory size" % (vm.id, vm_pct_free_memory))
 				logger.debug(vmid_msg + "VM %s has %s total memory (min bound: %s; max bound %s)" % (vm.id, vm.total_memory, memory_lower_bound, memory_upper_bound))
 				if self.vm_data[vm.id].last_set_mem is not None:
