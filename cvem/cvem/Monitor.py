@@ -154,9 +154,20 @@ class Monitor:
 			memory_lower_bound = vm.min_total_memory or Config.MEM_MIN or 0
 			memory_upper_bound = vm.max_total_memory or self.vm_data[vm.id].original_mem or vm.allocated_memory or INFINITY
 
+			if memory_upper_bound < memory_lower_bound:
+				logger.warning(vmid_msg + "Memory bounds are incorrect (upper == %s is less than lower = %s). Ignoring this VM!" % (memory_upper_bound, memory_lower_bound))
+				return
+
 			min_free_memory = Config.MIN_FREE_MEMORY
 			if vm.min_free_mem:  # check if the VM has defined a specific MIN_FREE_MEMORY value
 				min_free_memory = vm.min_free_mem
+
+			if min_free_memory > memory_upper_bound:
+				logger.warning(vmid_msg + "Min free mem (%s) is higher than upper memory bound (%s). Ignoring this VM!" % (min_free_memory, memory_upper_bound))
+				return
+			if mem_over_ratio >= 100:
+				logger.warning(vmid_msg + "Memory overprovisioning ratio (%s) is higher than 100%. Ignoring this VM!" % (mem_over_ratio))
+				return
 
 			margin = int(float(memory_upper_bound) * 0.05)
 
