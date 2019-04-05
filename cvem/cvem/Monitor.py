@@ -154,9 +154,45 @@ class Monitor:
 			memory_lower_bound = vm.min_total_memory or Config.MEM_MIN or 0
 			memory_upper_bound = vm.max_total_memory or self.vm_data[vm.id].original_mem or vm.allocated_memory or INFINITY
 
-			if vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN) or vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN) or vm.total_memory < (memory_lower_bound - Config.MEM_MARGIN) or vm.total_memory > (memory_upper_bound + Config.MEM_MARGIN):
+			if memory_upper_bound < memory_lower_bound:
+				logger.warning(vmid_msg + "Memory bounds are incorrect (upper == %s is less than lower = %s). Ignoring this VM!" % (memory_upper_bound, memory_lower_bound))
+				return
+
+			min_free_memory = Config.MIN_FREE_MEMORY
+			if vm.min_free_mem:  # check if the VM has defined a specific MIN_FREE_MEMORY value
+				min_free_memory = vm.min_free_mem
+
+			if min_free_memory > memory_upper_bound:
+				logger.warning(vmid_msg + "Min free mem (%s) is higher than upper memory bound (%s). Ignoring this VM!" % (min_free_memory, memory_upper_bound))
+				return
+			if mem_over_ratio >= 100:
+				logger.warning(vmid_msg + "Memory overprovisioning ratio (%s) is higher than 100%. Ignoring this VM!" % (mem_over_ratio))
+				return
+
+			margin = int(float(memory_upper_bound) * 0.05)
+
+			_not_enough_total = vm.total_memory < (memory_lower_bound - margin)
+			_too_much_total = vm.total_memory > (memory_upper_bound + margin)
+			_at_maximum_bound = vm.total_memory > (memory_upper_bound - margin)
+			_at_mininum_bound = vm.total_memory < (memory_lower_bound + margin)
+			_under_free_ratio = mem_over_ratio > 0 and vm_pct_free_memory < (mem_over_ratio - Config.MEM_MARGIN)
+			_over_free_ratio = mem_over_ratio > 0 and vm_pct_free_memory > (mem_over_ratio + Config.MEM_MARGIN)
+			_under_min_free = min_free_memory > 0 and vm.free_memory <= min_free_memory
+			_at_min_free = min_free_memory > 0 and vm.free_memory < float(min_free_memory) * 1.1
+
+			cases = dict(
+				_not_enough_free  = _under_min_free and not _at_maximum_bound,
+				_too_much_free    = _over_free_ratio and not _at_mininum_bound and not _at_min_free,
+				_not_enough_total = vm.total_memory < (memory_lower_bound - margin),
+				_too_much_total   = vm.total_memory > (memory_upper_bound + margin),
+			)
+			if any(cases.values()):
+				for _case, _true in cases.items():
+					if _true:
+						logger.debug(vmid_msg + "VM %s has %s" % (vm.id, _case))
+
 				now = time.time()
-		
+
 				logger.debug(vmid_msg + "VM %s has %.2f%% of free memory, change the memory size" % (vm.id, vm_pct_free_memory))
 				logger.debug(vmid_msg + "VM %s has %s total memory (min bound: %s; max bound %s)" % (vm.id, vm.total_memory, memory_lower_bound, memory_upper_bound))
 				if self.vm_data[vm.id].last_set_mem is not None:
@@ -164,32 +200,36 @@ class Monitor:
 				else:
 					self.vm_data[vm.id].original_mem = vm.allocated_memory
 					logger.debug(vmid_msg + "The memory of this VM has been never modified. Store the initial memory  : " + str(self.vm_data[vm.id].original_mem))
-					self.vm_data[vm.id].last_set_mem = now
+					self.vm_data[vm.id].last_set_mem = now - 2 * Config.COOLDOWN
 
 				if (now - self.vm_data[vm.id].last_set_mem) < Config.COOLDOWN:
 					logger.debug(vmid_msg + "It is in cooldown period. No changing the memory.")
 				else:
 					used_mem = vm.total_memory - vm.free_memory
-					min_free_memory = Config.MIN_FREE_MEMORY
-					# check if the VM has defined a specific MIN_FREE_MEMORY value
-					if vm.min_free_mem:
-						min_free_memory = vm.min_free_mem
-					# it not free memory use exponential backoff idea
-					if vm.free_memory <= min_free_memory:
+
+					if cases['_not_enough_total']:
+						logger.debug(vmid_msg + "Total memory is below minimum")
+						new_mem = memory_lower_bound
+					elif cases['_too_much_total']:
+						logger.debug(vmid_msg + "Total memory is above maximum")
+						new_mem = memory_upper_bound
+					elif cases['_not_enough_free']:
 						logger.debug(vmid_msg + "No free memory in the VM!")
-						if self.vm_data[vm.id].no_free_memory_count > 1:
-							# if this is the third time with no free memory use the original size
-							logger.debug(vmid_msg + "Increase the mem to the original size.")
-							new_mem =  self.vm_data[vm.id].original_mem
-							self.vm_data[vm.id].no_free_memory_count = 0
+						logger.debug(vmid_msg + "Increase the mem by 33%")
+						new_mem = int(vm.total_memory * 1.33)
+						#new_mem =  int(used_mem + (memory_upper_bound - used_mem) * 0.33)
+					elif cases['_too_much_free']:
+						if mem_over_ratio > 0:
+							divider = 1.0 - (mem_over_ratio/100.0)
+							logger.debug(vmid_msg + "The used memory %d is divided by %.2f" % (int(used_mem), divider))
+							new_mem =  int(used_mem / divider)
+							_new_free_mem = new_mem - used_mem
+							if _new_free_mem < min_free_memory:
+								new_mem += (int(float(min_free_memory) * 1.1) - _new_free_mem)
 						else:
-							logger.debug(vmid_msg + "Increase the mem with 50% of the original.")
-							new_mem =  int(used_mem + (self.vm_data[vm.id].original_mem - used_mem) * 0.5)
-							self.vm_data[vm.id].no_free_memory_count += 1
+							assert False
 					else:
-						divider = 1.0 - (mem_over_ratio/100.0)
-						logger.debug(vmid_msg + "The used memory %d is divided by %.2f" % (int(used_mem), divider))
-						new_mem =  int(used_mem / divider)
+						assert False
 
 					# Check for minimum memory
 					if new_mem < memory_lower_bound:
